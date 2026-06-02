@@ -1,5 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom';
 import { Activity, BarChart2, Cpu, FileText, Zap } from 'lucide-react';
+import AIChat from '../pages/AIChat';
+
 
 const navItems = [
   { path: '/', icon: Activity, label: 'Dashboard' },
@@ -47,11 +49,14 @@ export default function Layout() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto p-8 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
+            <main className="flex-1 overflow-y-auto p-8 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-slate-950">
         <div className="max-w-6xl mx-auto">
           <Outlet />
         </div>
       </main>
+
+      <AIChat />
+
     </div>
-  );
+    );
 }

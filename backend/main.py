@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from typing import List
+import json
+from bedrock_client import bedrock
 
 from models import (
     LivePowerStatus,
@@ -128,14 +130,40 @@ def get_billing_summary():
 # -----------------------------------
 # AI APIs
 # -----------------------------------
-
-@app.post(
-    "/api/v1/chat",
-    response_model=ChatResponse
-)
+@app.post("/api/v1/chat")
 def chat_endpoint(request: ChatRequest):
+
+    prompt = request.message
+
+    body = {
+        "schemaVersion": "messages-v1",
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ]
+    }
+
+    response = bedrock.invoke_model(
+        modelId="global.amazon.nova-2-lite-v1:0",
+        body=json.dumps(body),
+        contentType="application/json",
+        accept="application/json"
+    )
+
+    result = json.loads(
+        response["body"].read()
+    )
+
+    reply = result["output"]["message"]["content"][0]["text"]
+
     return ChatResponse(
-        reply=f"Mock Chat Reply to: {request.message}"
+        reply=reply
     )
 
 @app.post(

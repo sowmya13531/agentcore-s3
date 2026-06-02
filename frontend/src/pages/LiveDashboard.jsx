@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Zap, Sun, Activity } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/v1';
+const API_BASE = 'https://2xshwaapwimchvrjacyfvpdboe0fjbbs.lambda-url.ap-south-1.on.aws/api/v1';
 
 export default function LiveDashboard() {
   const [powerStatus, setPowerStatus] = useState(null);

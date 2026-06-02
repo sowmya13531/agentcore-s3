@@ -2,3 +2,7 @@ fastapi
 mangum
 uvicorn
 pydantic
+boto3
+chromadb
+pypdf
+python-dotenv

@@ -5,6 +5,7 @@ import UsageHistory from './pages/UsageHistory';
 import SmartControl from './pages/SmartControl';
 import Invoices from './pages/Invoices';
 import NotFound from './pages/NotFound';
+import AIChat from "./pages/AIChat";
 
 function App() {
   return (
