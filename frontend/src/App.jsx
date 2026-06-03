@@ -9,29 +9,23 @@ import Invoices from "./pages/Invoices";
 import AIChat from "./pages/AIChat";
 import NotFound from "./pages/NotFound";
 
+import AIWidget from "./components/AIWidget";
+
 export default function App() {
   return (
-    <Routes>
-      
-      {/* MAIN LAYOUT ROUTE */}
-      <Route path="/" element={<Layout />}>
+    <>
+      <Routes>
+        <Route path="/" element={<Layout />}>
+          <Route index element={<LiveDashboard />} />
+          <Route path="analytics" element={<UsageHistory />} />
+          <Route path="devices" element={<SmartControl />} />
+          <Route path="billing" element={<Invoices />} />
+          <Route path="ai-chat" element={<AIChat />} />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
 
-        {/* DEFAULT DASHBOARD */}
-        <Route index element={<LiveDashboard />} />
-
-        {/* CORE PAGES */}
-        <Route path="analytics" element={<UsageHistory />} />
-        <Route path="devices" element={<SmartControl />} />
-        <Route path="billing" element={<Invoices />} />
-
-        {/* AI COPILOT PAGE */}
-        <Route path="ai-chat" element={<AIChat />} />
-
-        {/* 404 INSIDE LAYOUT */}
-        <Route path="*" element={<NotFound />} />
-
-      </Route>
-
-    </Routes>
+      <AIWidget />
+    </>
   );
 }

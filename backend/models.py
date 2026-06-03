@@ -30,5 +30,8 @@ class BillingSummary(BaseModel):
 class ChatRequest(BaseModel):
     message: str
 
+class QARequest(BaseModel):
+    question: str
+
 class ChatResponse(BaseModel):
     reply: str

@@ -15,7 +15,8 @@ from models import (
     DeviceUpdate,
     BillingSummary,
     ChatRequest,
-    ChatResponse
+    ChatResponse,
+    QARequest
 )
 
 from mock_data import (
@@ -25,28 +26,12 @@ from mock_data import (
     MOCK_BILLING_SUMMARY
 )
 
-# -----------------------------------
-# FastAPI App
-# -----------------------------------
-
 app = FastAPI(
     title="VoltStream API",
-    version="1.0.0",
-    description="Backend API for VoltStream Smart Energy Platform"
+    version="1.0.0"
 )
 
-# Build index once at startup (SAFE)
-@app.on_event("startup")
-def startup_event():
-    try:
-        build_index()
-    except Exception as e:
-        print("Index build failed:", str(e))
-
-# -----------------------------------
-# CORS Configuration
-# -----------------------------------
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,83 +40,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------------
-# Root Route
-# -----------------------------------
+# Startup index
+@app.on_event("startup")
+def startup_event():
+    try:
+        build_index()
+    except Exception as e:
+        print("Index error:", e)
 
 @app.get("/")
 def root():
-    return {"message": "VoltStream API is running successfully"}
+    return {"message": "VoltStream running"}
 
-# -----------------------------------
-# Dashboard APIs
-# -----------------------------------
-
+# ---------------- DASHBOARD ----------------
 @app.get("/api/v1/dashboard/live", response_model=LivePowerStatus)
 def get_live_dashboard():
     return MOCK_DASHBOARD_LIVE
 
-# -----------------------------------
-# Analytics APIs
-# -----------------------------------
-
-@app.get("/api/v1/analytics/history", response_model=List[EnergyDataPoint])
-def get_analytics_history(
-    period: str = Query(default="daily", pattern="^(daily|weekly|monthly)$")
-):
-    if period in MOCK_ANALYTICS_HISTORY:
-        return MOCK_ANALYTICS_HISTORY[period]
-
-    raise HTTPException(status_code=400, detail="Invalid period")
-
-# -----------------------------------
-# Device APIs
-# -----------------------------------
-
-@app.get("/api/v1/devices", response_model=List[DeviceResponse])
-def get_devices():
-    return MOCK_DEVICES
-
-
-@app.patch("/api/v1/devices/{device_id}", response_model=DeviceResponse)
-def update_device(device_id: str, update_data: DeviceUpdate):
-
-    for device in MOCK_DEVICES:
-        if device.id == device_id:
-            device.is_on = update_data.is_on
-            return device
-
-    raise HTTPException(status_code=404, detail="Device not found")
-
-# -----------------------------------
-# Billing APIs
-# -----------------------------------
-
-@app.get("/api/v1/billing/summary", response_model=BillingSummary)
-def get_billing_summary():
-    return MOCK_BILLING_SUMMARY
-
-# -----------------------------------
-# CHAT API (Bedrock)
-# -----------------------------------
-
+# ---------------- CHAT ----------------
 @app.post("/api/v1/chat", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
-
     prompt = request.message
 
     body = {
         "messages": [
             {
                 "role": "user",
-                "content": [{"text": prompt}]
+                "content": [{"text": request.message}]
             }
         ]
     }
 
     try:
         response = bedrock.invoke_model(
-            modelId = "global.amazon.nova-2-lite-v1:0",
+            modelId="global.amazon.nova-2-lite-v1:0",
             body=json.dumps(body),
             contentType="application/json",
             accept="application/json"
@@ -151,17 +93,14 @@ def chat_endpoint(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# -----------------------------------
-# QA API (RAG SYSTEM)
-# -----------------------------------
 
+# ---------------- QA (RAG) ----------------
 @app.post("/api/v1/qa", response_model=ChatResponse)
-def qa_endpoint(request: ChatRequest):
+def qa_endpoint(request: QARequest):
 
-    question = request.message
+    question = request.question
 
     try:
-        # retrieve top chunks
         chunks = retrieve_chunks(question)
 
         if not chunks:
@@ -170,14 +109,12 @@ def qa_endpoint(request: ChatRequest):
         context = "\n".join(chunks[:3])
 
         prompt = f"""
-You are an AI assistant for the energy domain.
+You are an AI assistant for energy domain.
 
 RULES:
-- Use ONLY the context below
-- If answer is not in context, respond EXACTLY:
-"I don't have that information"
-- Do NOT explain anything
-- Do NOT mention context
+- Use ONLY context
+- If not found, say EXACTLY:
+I don't have that information
 
 Context:
 {context}
@@ -196,7 +133,7 @@ Question:
         }
 
         response = bedrock.invoke_model(
-            modelId = "global.amazon.nova-2-lite-v1:0",
+            modelId="global.amazon.nova-2-lite-v1:0",
             body=json.dumps(body),
             contentType="application/json",
             accept="application/json"
@@ -216,24 +153,5 @@ Question:
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# -----------------------------------
-# AGENT (Mock)
-# -----------------------------------
-
-@app.post("/api/v1/agent", response_model=ChatResponse)
-def agent_endpoint(request: ChatRequest):
-    return ChatResponse(reply=f"Mock Agent Reply to: {request.message}")
-
-# -----------------------------------
-# Local Run
-# -----------------------------------
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
-
-# -----------------------------------
-# Lambda Handler
-# -----------------------------------
 
 handler = Mangum(app)
