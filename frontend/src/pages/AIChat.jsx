@@ -1,252 +1,132 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { MessageCircle, X, Send } from "lucide-react";
+import { Send, Bot, User } from "lucide-react";
 
-const API_BASE =
-"http://127.0.0.1:8000/api/v1";
+const API_BASE = "http://127.0.0.1:8000/api/v1";
 
 export default function AIChat() {
-
-  const [isOpen, setIsOpen] = useState(false);
-
   const [message, setMessage] = useState("");
-
   const [messages, setMessages] = useState([]);
-
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async () => {
+  const bottomRef = useRef(null);
 
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const sendMessage = async () => {
     if (!message.trim()) return;
 
-    const userMessage = {
-      sender: "user",
-      text: message
-    };
+    const userMsg = { role: "user", text: message };
+    setMessages((prev) => [...prev, userMsg]);
 
-    setMessages((prev) => [...prev, userMessage]);
-
-    const currentMessage = message;
-
+    const current = message;
     setMessage("");
+    setLoading(true);
 
     try {
-
-      setLoading(true);
-
-      console.log("Sending:", currentMessage);
-
-      const response = await axios.post(
-        `${API_BASE}/chat`,
-        {
-          message: currentMessage
-        }
-      );
-
-      console.log(response.data);
-
-      const aiMessage = {
-        sender: "ai",
-        text: response.data.reply
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-
-    } catch (error) {
-
-      console.error(error);
+      const res = await axios.post(`${API_BASE}/chat`, {
+        message: current,
+      });
 
       setMessages((prev) => [
         ...prev,
-        {
-          sender: "ai",
-          text: "Unable to contact AI Assistant."
-        }
+        { role: "ai", text: res.data.reply },
       ]);
-
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "ai", text: "⚠️ AI service not reachable" },
+      ]);
     } finally {
-
       setLoading(false);
-
     }
-  };
-
-  const handleKeyDown = (e) => {
-
-    if (e.key === "Enter") {
-
-      sendMessage();
-
-    }
-
   };
 
   return (
-    <>
-      {/* Floating Button */}
+    <div className="flex flex-col h-full bg-slate-950 rounded-2xl border border-slate-800">
 
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="
-        fixed
-        bottom-6
-        right-6
-        z-50
-        w-16
-        h-16
-        rounded-full
-        bg-blue-600
-        hover:bg-blue-700
-        text-white
-        shadow-xl
-        flex
-        items-center
-        justify-center
-        "
-      >
-        {isOpen ? <X size={26} /> : <MessageCircle size={26} />}
-      </button>
+      {/* HEADER */}
+      <div className="p-4 border-b border-slate-800 flex items-center gap-3">
+        <div className="bg-blue-600 p-2 rounded-lg">
+          <Bot size={18} />
+        </div>
+        <div>
+          <h1 className="font-semibold">AI Energy Copilot</h1>
+          <p className="text-xs text-slate-400">
+            Ask anything about electricity, billing & devices
+          </p>
+        </div>
+      </div>
 
-      {/* Chat Window */}
+      {/* CHAT AREA */}
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
-      {isOpen && (
-        <div
-          className="
-          fixed
-          bottom-24
-          right-6
-          z-50
-          w-[400px]
-          h-[550px]
-          bg-slate-900
-          border
-          border-slate-700
-          rounded-2xl
-          shadow-2xl
-          flex
-          flex-col
-          overflow-hidden
-          "
-        >
-
-          {/* Header */}
-
-          <div className="bg-blue-600 p-4">
-
-            <h2 className="text-white font-semibold">
-              VoltStream AI Copilot
-            </h2>
-
+        {messages.length === 0 && (
+          <div className="text-slate-500 text-center mt-10">
+            💡 Try: "How to reduce my electricity bill?"
           </div>
+        )}
 
-          {/* Chat Messages */}
-
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-
-            {messages.length === 0 && (
-
-              <div className="text-slate-500 text-sm">
-                Ask anything about energy usage, billing, devices, or solar generation.
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            className={`flex items-end gap-2 ${
+              m.role === "user" ? "justify-end" : "justify-start"
+            }`}
+          >
+            {m.role === "ai" && (
+              <div className="bg-blue-600 p-2 rounded-full">
+                <Bot size={14} />
               </div>
-
             )}
 
-            {messages.map((msg, index) => (
-
-              <div
-                key={index}
-                className={`flex ${
-                  msg.sender === "user"
-                    ? "justify-end"
-                    : "justify-start"
-                }`}
-              >
-
-                <div
-                  className={`max-w-[80%] px-4 py-3 rounded-xl ${
-                    msg.sender === "user"
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-800 text-slate-200"
-                  }`}
-                >
-                  {msg.text}
-                </div>
-
-              </div>
-
-            ))}
-
-            {loading && (
-
-              <div className="flex justify-start">
-
-                <div className="bg-slate-800 px-4 py-3 rounded-xl">
-
-                  <div
-                    className="
-                    w-5
-                    h-5
-                    border-2
-                    border-white
-                    border-t-transparent
-                    rounded-full
-                    animate-spin
-                    "
-                  />
-
-                </div>
-
-              </div>
-
-            )}
-
-          </div>
-
-          {/* Input Area */}
-
-          <div className="border-t border-slate-700 p-4">
-
-            <div className="flex gap-2">
-
-              <input
-                type="text"
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Ask VoltStream AI..."
-                className="
-                flex-1
-                bg-slate-800
-                border
-                border-slate-700
-                rounded-xl
-                px-4
-                py-3
-                text-white
-                outline-none
-                "
-              />
-
-              <button
-                onClick={sendMessage}
-                disabled={loading}
-                className="
-                bg-blue-600
-                hover:bg-blue-700
-                px-4
-                rounded-xl
-                text-white
-                "
-              >
-                <Send size={18} />
-              </button>
-
+            <div
+              className={`px-4 py-3 rounded-2xl max-w-[70%] text-sm ${
+                m.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-slate-800 text-slate-200"
+              }`}
+            >
+              {m.text}
             </div>
 
+            {m.role === "user" && (
+              <div className="bg-slate-700 p-2 rounded-full">
+                <User size={14} />
+              </div>
+            )}
           </div>
+        ))}
 
-        </div>
-      )}
-    </>
+        {loading && (
+          <div className="text-slate-400 flex gap-2">
+            <span>AI thinking</span>
+            <span className="animate-bounce">...</span>
+          </div>
+        )}
+
+        <div ref={bottomRef} />
+      </div>
+
+      {/* INPUT */}
+      <div className="p-4 border-t border-slate-800 flex gap-2">
+        <input
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+          placeholder="Ask VoltStream AI..."
+          className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white"
+        />
+
+        <button
+          onClick={sendMessage}
+          className="bg-blue-600 hover:bg-blue-700 px-4 rounded-xl"
+        >
+          <Send size={18} />
+        </button>
+      </div>
+    </div>
   );
 }
