@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
 from typing import List
 import json
+from agent.strands_agent import agent
+
 
 from rag.vector_store import collection
 from bedrock_client import bedrock
@@ -301,10 +303,25 @@ Question:
     "/api/v1/agent",
     response_model=ChatResponse
 )
-def agent_endpoint(request: ChatRequest):
-    return ChatResponse(
-        reply=f"Mock Agent Reply to: {request.message}"
-    )
+def agent_endpoint(
+    request: ChatRequest
+):
+    try:
+
+        result = agent(
+            request.message
+        )
+
+        return ChatResponse(
+            reply=str(result)
+        )
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # -----------------------------------
 # Local Development Server

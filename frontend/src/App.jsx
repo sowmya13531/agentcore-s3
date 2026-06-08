@@ -17,14 +17,35 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<LiveDashboard />} />
-          <Route path="analytics" element={<UsageHistory />} />
-          <Route path="devices" element={<SmartControl />} />
-          <Route path="billing" element={<Invoices />} />
-          <Route path="ai-chat" element={<AIChat />} />
-          <Route path="*" element={<NotFound />} />
+
+          <Route
+            path="analytics"
+            element={<UsageHistory />}
+          />
+
+          <Route
+            path="devices"
+            element={<SmartControl />}
+          />
+
+          <Route
+            path="billing"
+            element={<Invoices />}
+          />
+
+          <Route
+            path="ai-chat"
+            element={<AIChat />}
+          />
+
+          <Route
+            path="*"
+            element={<NotFound />}
+          />
         </Route>
       </Routes>
 
+      {/* Floating Chat / RAG / Agent Widget */}
       <AIWidget />
     </>
   );

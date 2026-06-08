@@ -1,6 +1,12 @@
-from models import LivePowerStatus, EnergyDataPoint, DeviceResponse, BillingSummary
+from models import (
+    LivePowerStatus,
+    EnergyDataPoint,
+    DeviceResponse,
+    BillingSummary
+)
 
 # Mock Data Storage
+
 MOCK_DASHBOARD_LIVE = LivePowerStatus(
     grid_draw_kw=2.5,
     solar_generation_kw=1.8,
@@ -34,12 +40,55 @@ MOCK_ANALYTICS_HISTORY = {
 }
 
 MOCK_DEVICES = [
-    DeviceResponse(id="dev-1", name="HVAC System", type="climate", power_draw_w=3500, is_on=True),
-    DeviceResponse(id="dev-2", name="Water Heater", type="appliance", power_draw_w=4500, is_on=False),
-    DeviceResponse(id="dev-3", name="Pool Pump", type="appliance", power_draw_w=1500, is_on=True),
-    DeviceResponse(id="dev-4", name="EV Charger", type="vehicle", power_draw_w=7200, is_on=False),
-    DeviceResponse(id="dev-5", name="Living Room Lights", type="lighting", power_draw_w=150, is_on=True),
-    DeviceResponse(id="dev-6", name="Refrigerator", type="appliance", power_draw_w=800, is_on=True),
+    DeviceResponse(
+        id="dev-1",
+        name="HVAC System",
+        type="climate",
+        power_draw_w=3500,
+        is_on=True
+    ),
+    DeviceResponse(
+        id="dev-2",
+        name="Water Heater",
+        type="appliance",
+        power_draw_w=4500,
+        is_on=False
+    ),
+    DeviceResponse(
+        id="dev-3",
+        name="Pool Pump",
+        type="appliance",
+        power_draw_w=1500,
+        is_on=True
+    ),
+    DeviceResponse(
+        id="dev-4",
+        name="EV Charger",
+        type="vehicle",
+        power_draw_w=7200,
+        is_on=False
+    ),
+    DeviceResponse(
+        id="dev-5",
+        name="Living Room Lights",
+        type="lighting",
+        power_draw_w=150,
+        is_on=True
+    ),
+    DeviceResponse(
+        id="dev-6",
+        name="Refrigerator",
+        type="appliance",
+        power_draw_w=800,
+        is_on=True
+    ),
+    DeviceResponse(
+        id="dev-7",
+        name="Dishwasher",
+        type="appliance",
+        power_draw_w=1200,
+        is_on=True
+    )
 ]
 
 MOCK_BILLING_SUMMARY = BillingSummary(

@@ -7,42 +7,59 @@ export default function AIWidget() {
 
   const [chatMessages, setChatMessages] = useState([]);
   const [ragMessages, setRagMessages] = useState([]);
+  const [agentMessages, setAgentMessages] = useState([]);
 
   const [loading, setLoading] = useState(false);
 
   const API = "http://127.0.0.1:8000/api/v1";
 
-  const messages = tab === "chat" ? chatMessages : ragMessages;
-  const setMessages = tab === "chat" ? setChatMessages : setRagMessages;
+  const messages =
+    tab === "chat"
+      ? chatMessages
+      : tab === "rag"
+      ? ragMessages
+      : agentMessages;
+
+  const setMessages =
+    tab === "chat"
+      ? setChatMessages
+      : tab === "rag"
+      ? setRagMessages
+      : setAgentMessages;
 
   const sendMessage = async () => {
     if (!input.trim()) return;
 
     const userText = input;
+
     setInput("");
 
     setMessages((prev) => [
       ...prev,
-      { role: "user", text: userText },
+      {
+        role: "user",
+        text: userText,
+      },
     ]);
 
     setLoading(true);
 
     try {
-      const endpoint = tab === "chat" ? "/chat" : "/qa";
-
-      // IMPORTANT
-      const body =
+      const endpoint =
         tab === "chat"
-          ? { message: userText }
-          : { question: userText };
+          ? "/chat"
+          : tab === "rag"
+          ? "/qa"
+          : "/agent";
 
       const res = await fetch(API + endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          message: userText,
+        }),
       });
 
       if (!res.ok) {
@@ -87,6 +104,7 @@ export default function AIWidget() {
           >
             <div className="header">
               <div className="tabs">
+
                 <button
                   className={tab === "chat" ? "active" : ""}
                   onClick={() => setTab("chat")}
@@ -100,6 +118,14 @@ export default function AIWidget() {
                 >
                   RAG
                 </button>
+
+                <button
+                  className={tab === "agent" ? "active" : ""}
+                  onClick={() => setTab("agent")}
+                >
+                  Agent
+                </button>
+
               </div>
 
               <button
@@ -111,11 +137,14 @@ export default function AIWidget() {
             </div>
 
             <div className="messages">
+
               {messages.length === 0 && (
                 <div className="welcome">
                   {tab === "chat"
                     ? "Ask anything to VoltStream AI"
-                    : "Ask questions from your PDF knowledge base"}
+                    : tab === "rag"
+                    ? "Ask questions from your PDF knowledge base"
+                    : "Control smart devices using AI Agent"}
                 </div>
               )}
 
@@ -133,6 +162,7 @@ export default function AIWidget() {
                   Thinking...
                 </div>
               )}
+
             </div>
 
             <div className="inputBox">
@@ -144,10 +174,13 @@ export default function AIWidget() {
                 placeholder={
                   tab === "chat"
                     ? "Ask anything..."
-                    : "Ask from PDF..."
+                    : tab === "rag"
+                    ? "Ask from PDF..."
+                    : "Turn off Refrigerator..."
                 }
                 onKeyDown={(e) =>
-                  e.key === "Enter" && sendMessage()
+                  e.key === "Enter" &&
+                  sendMessage()
                 }
               />
 

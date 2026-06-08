@@ -6,3 +6,4 @@ boto3
 chromadb
 pypdf
 python-dotenv
+strands-agents
