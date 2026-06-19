@@ -1,5 +1,9 @@
 from strands import tool
-from mock_data import MOCK_DEVICES
+MOCK_DEVICES = {
+    "dishwasher": {"id": "dishwasher", "name": "Dishwasher", "state": "OFF"},
+    "lights": {"id": "lights", "name": "Lights", "state": "OFF"},
+    # add whatever devices your mock_data.py had
+}
 
 
 @tool

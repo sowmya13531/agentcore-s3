@@ -1,0 +1,1 @@
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"bedrock-agentcore:InvokeAgentRuntime","Resource":"arn:aws:bedrock-agentcore:ap-south-1:211374268044:runtime/agentcore_agent-tk2fHFEZwU/runtime-endpoint/DEFAULT"}]}
