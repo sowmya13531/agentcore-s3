@@ -1,10 +1,15 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from mangum import Mangum
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 import json
+import time
+from datetime import datetime
+from services.agentcore_client import invoke_agentcore
 from agent.strands_agent import agent
-
+from device_db import DEVICES_DB
+from device_store import save_devices
 
 from rag.vector_store import collection
 from bedrock_client import bedrock
@@ -26,6 +31,20 @@ from mock_data import (
     MOCK_DEVICES,
     MOCK_BILLING_SUMMARY
 )
+
+# -----------------------------------
+# Response Models
+# -----------------------------------
+
+class AgentResponse(BaseModel):
+    """Agent response with metadata"""
+    reply: str
+    message: str
+    success: bool
+    session_id: str
+    execution_time_ms: float
+    timestamp: str
+
 
 # -----------------------------------
 # FastAPI App
@@ -107,30 +126,46 @@ def get_analytics_history(
 # Device APIs
 # -----------------------------------
 
-@app.get(
-    "/api/v1/devices",
-    response_model=List[DeviceResponse]
-)
+@app.get("/api/v1/devices")
 def get_devices():
-    return MOCK_DEVICES
+
+    return [
+        DeviceResponse(
+            id=device["id"],
+            name=device["name"],
+            type=device["type"],
+            power_draw_w=device["power_draw_w"],
+            is_on=device["is_on"]
+        )
+        for device in DEVICES_DB.values()
+    ]
 
 
-@app.patch(
-    "/api/v1/devices/{device_id}",
-    response_model=DeviceResponse
-)
+@app.patch("/api/v1/devices/{device_id}")
 def update_device(
     device_id: str,
     update_data: DeviceUpdate
 ):
-    for device in MOCK_DEVICES:
-        if device.id == device_id:
-            device.is_on = update_data.is_on
-            return device
 
-    raise HTTPException(
-        status_code=404,
-        detail="Device not found"
+    if device_id not in DEVICES_DB:
+        raise HTTPException(
+            status_code=404,
+            detail="Device not found"
+        )
+
+    
+    DEVICES_DB[device_id]["is_on"] = update_data.is_on
+
+    save_devices(DEVICES_DB)
+
+    device = DEVICES_DB[device_id]
+
+    return DeviceResponse(
+        id=device["id"],
+        name=device["name"],
+        type=device["type"],
+        power_draw_w=device["power_draw_w"],
+        is_on=device["is_on"]
     )
 
 # -----------------------------------
@@ -296,31 +331,82 @@ Question:
         )
 
 # -----------------------------------
-# Agent API (Mock)
+# Agent API (with Metadata)
 # -----------------------------------
-
 @app.post(
     "/api/v1/agent",
-    response_model=ChatResponse
+    response_model=AgentResponse
 )
-def agent_endpoint(
-    request: ChatRequest
-):
-    try:
+def agent_endpoint(request: ChatRequest):
+    """
+    Invoke AI Agent via Lambda → AgentCore
+    Returns response with metadata (session_id, execution time, etc.)
+    """
 
-        result = agent(
-            request.message
+    start_time = time.time()
+
+    try:
+        # Call Lambda → AgentCore
+        result = invoke_agentcore(request.message)
+
+        print("\n=== AGENT RESULT ===")
+        print(result)
+        print("====================\n")
+
+        reply = result.get(
+            "reply",
+            "No response received"
         )
 
-        return ChatResponse(
-            reply=str(result)
+        # Extract session id from Lambda response
+        session_id = (
+            result.get("sessionId")
+            or result.get("runtimeSessionId")
+            or result.get("session_id")
+            or "unknown"
+        )
+
+        # Handle JSON reply if agent returns JSON string
+        try:
+            parsed = json.loads(reply)
+
+            if isinstance(parsed, dict):
+                reply = (
+                    parsed.get("response")
+                    or parsed.get("reply")
+                    or reply
+                )
+
+        except Exception:
+            pass
+
+        execution_time_ms = round(
+            (time.time() - start_time) * 1000,
+            2
+        )
+
+        return AgentResponse(
+            reply=reply,
+            message=request.message,
+            success=result.get("success", True),
+            session_id=session_id,
+            execution_time_ms=execution_time_ms,
+            timestamp=datetime.now().isoformat()
         )
 
     except Exception as e:
 
+        execution_time_ms = round(
+            (time.time() - start_time) * 1000,
+            2
+        )
+
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
+            headers={
+                "X-Execution-Time": str(execution_time_ms)
+            }
         )
 
 # -----------------------------------

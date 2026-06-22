@@ -1,65 +1,41 @@
 /**
- * AIWidget.jsx — Production version
+ * AIWidget.jsx — Simple Version (No Auth)
  *
- * Chat tab  → calls FastAPI locally (http://127.0.0.1:8000/api/v1/chat)
- * RAG tab   → calls FastAPI locally (http://127.0.0.1:8000/api/v1/qa)
- * Agent tab → calls API Gateway + Lambda + AgentCore with Cognito JWT auth
- *
- * Drop-in replacement for the original AIWidget.jsx.
- * Requires useAuth.js and LoginModal.jsx in the same folder.
- * Requires VITE_API_URL in frontend/.env
+ * Chat tab  → FastAPI (http://127.0.0.1:8000/api/v1/chat)
+ * RAG tab   → FastAPI (http://127.0.0.1:8000/api/v1/qa)
+ * Agent tab → Lambda → AgentCore (direct call, no auth needed)
  */
 
 import { useState } from "react";
-import { useAuth } from "./useAuth";
-import LoginModal from "./LoginModal";
 
-// ── Endpoints ────────────────────────────────────────────────────────────────
-const LOCAL_API = "http://127.0.0.1:8000/api/v1";           // FastAPI (Chat + RAG)
-const AGENT_API = import.meta.env.VITE_API_URL + "/agent";   // API Gateway → Lambda → AgentCore
+const LOCAL_API = "http://127.0.0.1:8000/api/v1";
+const AGENT_API = "https://kbvrs1wla4.execute-api.ap-south-1.amazonaws.com/prod/agent";
 
 export default function AIWidget() {
   const [open, setOpen] = useState(false);
-  const [tab, setTab]   = useState("chat");
+  const [tab, setTab] = useState("agent"); // Default to Agent tab
   const [input, setInput] = useState("");
 
-  const [chatMessages,  setChatMessages]  = useState([]);
-  const [ragMessages,   setRagMessages]   = useState([]);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [ragMessages, setRagMessages] = useState([]);
   const [agentMessages, setAgentMessages] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [sessionId, setSessionId] = useState(null);
 
-  const [loading, setLoading]     = useState(false);
-  const [showLogin, setShowLogin] = useState(false);
-
-  const { user, login, logout, getIdToken } = useAuth();
-
-  // ── Message state routing (identical pattern to original) ─────────────────
+  // Route messages by tab
   const messages =
-    tab === "chat"  ? chatMessages  :
-    tab === "rag"   ? ragMessages   :
-                      agentMessages;
+    tab === "chat" ? chatMessages : tab === "rag" ? ragMessages : agentMessages;
 
   const setMessages =
-    tab === "chat"  ? setChatMessages  :
-    tab === "rag"   ? setRagMessages   :
-                      setAgentMessages;
+    tab === "chat"
+      ? setChatMessages
+      : tab === "rag"
+      ? setRagMessages
+      : setAgentMessages;
 
-  // ── Tab click handler — Agent tab requires login ──────────────────────────
-  const handleTabClick = (newTab) => {
-    setTab(newTab);
-    if (newTab === "agent" && !user) {
-      setShowLogin(true);
-    }
-  };
-
-  // ── Send message ──────────────────────────────────────────────────────────
+  // Send message to appropriate endpoint
   const sendMessage = async () => {
     if (!input.trim()) return;
-
-    // Block Agent tab usage if not logged in
-    if (tab === "agent" && !user) {
-      setShowLogin(true);
-      return;
-    }
 
     const userText = input;
     setInput("");
@@ -70,69 +46,72 @@ export default function AIWidget() {
       let res;
 
       if (tab === "agent") {
-        // ── Production path: API Gateway + Cognito JWT ─────────────────────
-        // getIdToken() automatically refreshes if near-expired
-        const idToken = await getIdToken();
+  res = await fetch(AGENT_API, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: userText,
+      sessionId: sessionId,
+    }),
+  });
+} else {
+  const endpoint = tab === "chat" ? "/chat" : "/qa";
 
-        res = await fetch(AGENT_API, {
-          method: "POST",
-          headers: {
-            "Content-Type":  "application/json",
-            "Authorization": `Bearer ${idToken}`,
-          },
-          body: JSON.stringify({ message: userText }),
-        });
-
-      } else {
-        // ── Local FastAPI path (Chat + RAG) ────────────────────────────────
-        const endpoint = tab === "chat" ? "/chat" : "/qa";
-
-        res = await fetch(LOCAL_API + endpoint, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: userText }),
-        });
-      }
+  res = await fetch(LOCAL_API + endpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      message: userText,
+    }),
+  });
+}
 
       if (!res.ok) {
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody.error || `HTTP ${res.status}`);
+        throw new Error(`HTTP ${res.status}`);
       }
+      const data = await res.json();
 
-      const data  = await res.json();
-      const reply = data.reply || data.response || "No response received";
+if (data.sessionId) {
+  setSessionId(data.sessionId);
+  console.log("Session ID:", data.sessionId);
+}
 
-      setMessages((prev) => [...prev, { role: "bot", text: reply }]);
+if (data.requestId) {
+  console.log("Request ID:", data.requestId);
+}
 
+const reply =
+  data.reply ||
+  data.response ||
+  "No response received";
+
+setMessages((prev) => [
+  ...prev,
+  {
+    role: "bot",
+    text: reply,
+    sessionId: data.sessionId,
+    requestId: data.requestId,
+  },
+]);
+     
     } catch (error) {
-      console.error(error);
-
-      // Show login modal again on auth errors
-      if (error.message.includes("401") || error.message.includes("Not authenticated")) {
-        setShowLogin(true);
-        setMessages((prev) => [...prev, { role: "bot", text: "⚠️ Session expired — please sign in again." }]);
-      } else {
-        setMessages((prev) => [...prev, { role: "bot", text: `⚠️ ${error.message}` }]);
-      }
+      console.error("Error:", error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "bot", text: `⚠️ Error: ${error.message}` },
+      ]);
     }
 
     setLoading(false);
   };
 
-  // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <>
-      {/* Login modal — only mounts when needed */}
-      {showLogin && (
-        <LoginModal
-          onLogin={async (email, password) => {
-            await login(email, password);
-            setShowLogin(false);
-          }}
-          onClose={() => setShowLogin(false)}
-        />
-      )}
-
       {/* Floating Action Button */}
       <button className="fab" onClick={() => setOpen(true)}>
         🤖
@@ -141,108 +120,110 @@ export default function AIWidget() {
       {open && (
         <div className="overlay" onClick={() => setOpen(false)}>
           <div className="panel" onClick={(e) => e.stopPropagation()}>
-
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="header">
               <div className="tabs">
                 <button
                   className={tab === "chat" ? "active" : ""}
-                  onClick={() => handleTabClick("chat")}
+                  onClick={() => setTab("chat")}
                 >
                   Chat
                 </button>
-
                 <button
                   className={tab === "rag" ? "active" : ""}
-                  onClick={() => handleTabClick("rag")}
+                  onClick={() => setTab("rag")}
                 >
                   RAG
                 </button>
-
                 <button
                   className={tab === "agent" ? "active" : ""}
-                  onClick={() => handleTabClick("agent")}
+                  onClick={() => setTab("agent")}
                 >
                   Agent
                 </button>
               </div>
-
-              <div className="header-right">
-                {/* Show signed-in user + logout when on Agent tab */}
-                {tab === "agent" && user && (
-                  <div className="user-info">
-                    <span className="user-email">{user.email}</span>
-                    <button className="logout-btn" onClick={logout}>
-                      Sign out
-                    </button>
-                  </div>
-                )}
-
-                {/* Show login prompt on Agent tab when not signed in */}
-                {tab === "agent" && !user && (
-                  <button
-                    className="login-prompt"
-                    onClick={() => setShowLogin(true)}
-                  >
-                    Sign in
-                  </button>
-                )}
-
-                <button className="close" onClick={() => setOpen(false)}>
-                  ✕
-                </button>
-              </div>
+              <button className="close" onClick={() => setOpen(false)}>
+                ✕
+              </button>
             </div>
 
-            {/* ── Messages ── */}
+            {/* Messages */}
             <div className="messages">
+            {tab === "agent" && sessionId && (
+  <div
+    style={{
+      padding: "8px",
+      marginBottom: "10px",
+      background: "#0f172a",
+      borderRadius: "8px",
+      fontSize: "11px",
+      color: "#00c2ff",
+      wordBreak: "break-all",
+    }}
+  >
+    Session ID: {sessionId}
+  </div>
+)}
               {messages.length === 0 && (
                 <div className="welcome">
                   {tab === "chat"
-                    ? "Ask anything to VoltStream AI"
+                    ? "💬 Ask anything to VoltStream AI"
                     : tab === "rag"
-                    ? "Ask questions from your PDF knowledge base"
-                    : user
-                    ? "Control smart devices using AI Agent"
-                    : "🔒 Sign in to use the AI Agent"}
+                    ? "📄 Ask questions from PDF knowledge base"
+                    : "🏠 Control smart devices with AI Agent\n\nExample: 'Turn on the HVAC system'"}
                 </div>
               )}
 
               {messages.map((m, i) => (
-                <div key={i} className={`msg ${m.role}`}>
-                  {m.text}
-                </div>
-              ))}
+  <div key={i} className={`msg ${m.role}`}>
+    <div>{m.text}</div>
 
-              {loading && (
-                <div className="msg bot">Thinking...</div>
-              )}
+    {m.sessionId && (
+      <div
+        style={{
+          marginTop: "8px",
+          fontSize: "11px",
+          color: "#94a3b8",
+          wordBreak: "break-all",
+        }}
+      >
+        Session ID: {m.sessionId}
+      </div>
+    )}
+
+    {m.requestId && (
+      <div
+        style={{
+          fontSize: "11px",
+          color: "#94a3b8",
+          wordBreak: "break-all",
+        }}
+      >
+        Request ID: {m.requestId}
+      </div>
+    )}
+  </div>
+))}
+
+              {loading && <div className="msg bot">⏳ Thinking...</div>}
             </div>
 
-            {/* ── Input ── */}
+            {/* Input */}
             <div className="inputBox">
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 placeholder={
-                  tab === "chat"          ? "Ask anything..."         :
-                  tab === "rag"           ? "Ask from PDF..."          :
-                  !user                   ? "Sign in to use agent..."  :
-                                            "Turn off Refrigerator..."
+                  tab === "chat"
+                    ? "Ask anything..."
+                    : tab === "rag"
+                    ? "Ask from PDF..."
+                    : "Turn on HVAC, show all devices, energy tips..."
                 }
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                disabled={tab === "agent" && !user}
               />
-
-              <button
-                onClick={tab === "agent" && !user
-                  ? () => setShowLogin(true)
-                  : sendMessage}
-              >
-                {tab === "agent" && !user ? "Login" : "Send"}
-              </button>
+              <button onClick={sendMessage}>Send</button>
             </div>
-
           </div>
         </div>
       )}
@@ -261,13 +242,18 @@ export default function AIWidget() {
           font-size: 24px;
           cursor: pointer;
           z-index: 9999;
-          box-shadow: 0 0 20px rgba(0,194,255,.4);
+          box-shadow: 0 0 20px rgba(0, 194, 255, 0.4);
+          transition: transform 0.2s;
+        }
+
+        .fab:hover {
+          transform: scale(1.1);
         }
 
         .overlay {
           position: fixed;
           inset: 0;
-          background: rgba(0,0,0,.7);
+          background: rgba(0, 0, 0, 0.7);
           display: flex;
           justify-content: center;
           align-items: center;
@@ -284,6 +270,7 @@ export default function AIWidget() {
           flex-direction: column;
           overflow: hidden;
           border: 1px solid #1f2937;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
         }
 
         .header {
@@ -292,52 +279,28 @@ export default function AIWidget() {
           align-items: center;
           padding: 14px;
           border-bottom: 1px solid #1f2937;
+          background: #0f172a;
         }
 
-        .header-right {
+        .tabs {
           display: flex;
-          align-items: center;
           gap: 8px;
         }
 
-        .user-info {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .user-email {
-          font-size: 11px;
-          color: #94a3b8;
-        }
-
-        .logout-btn {
-          font-size: 11px;
-          color: #ef4444;
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 0;
-        }
-
-        .login-prompt {
-          font-size: 12px;
-          color: #00c2ff;
-          background: none;
-          border: 1px solid #00c2ff44;
-          border-radius: 6px;
-          padding: 4px 10px;
-          cursor: pointer;
-        }
-
         .tabs button {
-          margin-right: 8px;
           padding: 8px 14px;
           border: none;
           border-radius: 8px;
           background: #1f2937;
-          color: white;
+          color: #94a3b8;
           cursor: pointer;
+          font-size: 13px;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+
+        .tabs button:hover {
+          background: #374151;
         }
 
         .tabs .active {
@@ -352,6 +315,18 @@ export default function AIWidget() {
           color: white;
           cursor: pointer;
           font-size: 18px;
+          padding: 0;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 6px;
+          transition: background 0.2s;
+        }
+
+        .close:hover {
+          background: rgba(255, 255, 255, 0.1);
         }
 
         .messages {
@@ -366,52 +341,111 @@ export default function AIWidget() {
         .welcome {
           text-align: center;
           color: #94a3b8;
-          margin-top: 30px;
+          margin-top: 40px;
+          font-size: 14px;
+          line-height: 1.6;
+          white-space: pre-wrap;
         }
 
         .msg {
-          padding: 10px 14px;
+          padding: 12px 14px;
           border-radius: 12px;
-          max-width: 80%;
+          max-width: 85%;
           word-wrap: break-word;
+          font-size: 14px;
+          line-height: 1.5;
         }
 
-        .user {
+        .msg.user {
           align-self: flex-end;
           background: #2563eb;
+          color: white;
         }
 
-        .bot {
+        .msg.bot {
           align-self: flex-start;
           background: #374151;
+          color: #e5e7eb;
         }
 
         .inputBox {
           display: flex;
+          gap: 8px;
           border-top: 1px solid #1f2937;
+          padding: 8px;
+          background: #0f172a;
         }
 
         .inputBox input {
           flex: 1;
-          border: none;
+          border: 1px solid #374151;
           outline: none;
-          padding: 14px;
-          background: #0f172a;
+          padding: 12px;
+          background: #1f2937;
           color: white;
+          border-radius: 8px;
+          font-size: 14px;
+          transition: border 0.2s;
         }
 
-        .inputBox input:disabled {
-          opacity: 0.4;
-          cursor: not-allowed;
+        .inputBox input:focus {
+          border-color: #00c2ff;
+        }
+
+        .inputBox input::placeholder {
+          color: #6b7280;
         }
 
         .inputBox button {
           border: none;
-          padding: 14px 18px;
+          padding: 12px 18px;
           background: #00c2ff;
           color: black;
           cursor: pointer;
           font-weight: 600;
+          border-radius: 8px;
+          font-size: 14px;
+          transition: all 0.2s;
+        }
+
+        .inputBox button:hover {
+          background: #00d4ff;
+          transform: translateY(-1px);
+        }
+
+        .inputBox button:active {
+          transform: translateY(0);
+        }
+
+        /* Scrollbar styling */
+        .messages::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .messages::-webkit-scrollbar-track {
+          background: #1f2937;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+          background: #4b5563;
+          border-radius: 3px;
+        }
+
+        .messages::-webkit-scrollbar-thumb:hover {
+          background: #6b7280;
+        }
+
+        /* Responsive */
+        @media (max-width: 600px) {
+          .panel {
+            width: 100%;
+            height: 100%;
+            border-radius: 0;
+          }
+
+          .msg {
+            max-width: 90%;
+          }
         }
       `}</style>
     </>
