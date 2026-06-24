@@ -8,8 +8,9 @@ import time
 from datetime import datetime
 from services.agentcore_client import invoke_agentcore
 from agent.strands_agent import agent
-from device_db import DEVICES_DB
-from device_store import save_devices
+# from device_db import DEVICES_DB
+from device_store import load_devices, save_devices
+from agentCore.coordinator_agent import handle_query
 
 from rag.vector_store import collection
 from bedrock_client import bedrock
@@ -128,7 +129,8 @@ def get_analytics_history(
 
 @app.get("/api/v1/devices")
 def get_devices():
-
+    print("data loaded from device_store")
+    devices = load_devices()
     return [
         DeviceResponse(
             id=device["id"],
@@ -137,7 +139,7 @@ def get_devices():
             power_draw_w=device["power_draw_w"],
             is_on=device["is_on"]
         )
-        for device in DEVICES_DB.values()
+        for device in devices.values()
     ]
 
 
@@ -147,18 +149,19 @@ def update_device(
     update_data: DeviceUpdate
 ):
 
-    if device_id not in DEVICES_DB:
+    devices = load_devices()
+
+    if device_id not in devices:
         raise HTTPException(
             status_code=404,
             detail="Device not found"
         )
 
-    
-    DEVICES_DB[device_id]["is_on"] = update_data.is_on
+    devices[device_id]["is_on"] = update_data.is_on
 
-    save_devices(DEVICES_DB)
+    save_devices(devices)
 
-    device = DEVICES_DB[device_id]
+    device = devices[device_id]
 
     return DeviceResponse(
         id=device["id"],
@@ -408,6 +411,21 @@ def agent_endpoint(request: ChatRequest):
                 "X-Execution-Time": str(execution_time_ms)
             }
         )
+
+class ChatRequest(BaseModel):
+    message: str
+
+
+@app.post("/agentchat")
+async def chat(request: ChatRequest):
+
+    response = handle_query(
+        request.message
+    )
+
+    return {
+        "response": response
+    }
 
 # -----------------------------------
 # Local Development Server
